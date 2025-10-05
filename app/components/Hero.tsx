@@ -1,1 +1,3 @@
-
+'use client'
+import React from 'react'
+export default function Hero(){ return (<section className="relative"><div className="h-[56vh] flex items-center"><div className="absolute inset-0"><img src="/images/hero-car.webp" alt="hero" className="w-full h-full object-cover brightness-50" /><div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" /></div><div className="container relative z-10"><div className="max-w-3xl"><h1 className="text-5xl font-bold text-gold">Элитные корпоративные трансферы</h1><p className="mt-4 text-muted">Премиальные трансферы и аренда автомобилей для бизнеса</p><div className="mt-6 flex gap-3"><button onClick={()=>window.dispatchEvent(new CustomEvent('openModal'))} className="btn btn-primary">Заказать трансфер</button><a href="#contacts" className="btn">Контакты</a></div></div></div></div></section>)}

@@ -1,0 +1,6 @@
+'use client'
+import React, { useState } from 'react'
+export default function VacancyForm(){ const [f,setF]=useState({name:'',phone:'',experience:'',about:''}); const [ok,setOk]=useState<string|null>(null)
+ const ch=(e:any)=>setF({...f,[e.target.name]:e.target.value})
+ const submit=async(e:any)=>{e.preventDefault(); try{ const res=await fetch('/api/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'vacancy',fields:f})}); if(res.ok) setOk('Спасибо!'); else setOk('Ошибка'); }catch(err){setOk('Ошибка сети')} setF({name:'',phone:'',experience:'',about:''}) }
+ return (<form onSubmit={submit} className="space-y-3"><input name="name" value={f.name} onChange={ch} placeholder="Имя" className="w-full p-3 rounded bg-neutral-900" required /><input name="phone" value={f.phone} onChange={ch} placeholder="Телефон" className="w-full p-3 rounded bg-neutral-900" required /><input name="experience" value={f.experience} onChange={ch} placeholder="Стаж" className="w-full p-3 rounded bg-neutral-900" required /><textarea name="about" value={f.about} onChange={ch} placeholder="Расскажите о себе" className="w-full p-3 rounded bg-neutral-900" /><button className="btn btn-primary" type="submit">Откликнуться</button>{ok && <p className="text-sm text-green-400">{ok}</p>}</form>)}
