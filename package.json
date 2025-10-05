@@ -1,0 +1,28 @@
+{
+  "name": "bvetra-pro",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "vercel-build": "next build"
+  },
+  "dependencies": {
+    "next": "14.1.0",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "axios": "^1.4.0",
+    "framer-motion": "^10.12.16",
+    "gray-matter": "^4.0.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "tailwindcss": "^3.4.12",
+    "postcss": "^8.4.21",
+    "autoprefixer": "^10.4.14",
+    "eslint": "8.45.0",
+    "eslint-config-next": "14.1.0"
+  }
+}
