@@ -5,11 +5,19 @@ export async function POST(req: Request) {
     const { message, history = [] } = await req.json()
 
     const apiKey = process.env.OPENAI_API_KEY
-    if (!apiKey) return NextResponse.json({ reply: 'OpenAI API key not configured' }, { status: 500 })
+    if (!apiKey)
+      return NextResponse.json({ reply: 'OpenAI API ключ не найден' }, { status: 500 })
 
     const messages = [
-      { role: 'system', content: 'Ты — виртуальный ассистент компании Bvetra. Отвечай дружелюбно и по делу. Если пользователь просит оформить заказ, предложи кнопку "Оформить заказ".' },
-      ...history.map((m: any) => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content })),
+      {
+        role: 'system',
+        content:
+          'Ты — ассистент компании Bvetra. Помогаешь оформить трансфер, отвечаешь вежливо и по делу.',
+      },
+      ...history.map((m: any) => ({
+        role: m.role === 'user' ? 'user' : 'assistant',
+        content: m.content,
+      })),
       { role: 'user', content: message },
     ]
 
@@ -23,20 +31,14 @@ export async function POST(req: Request) {
         model: 'gpt-4o-mini',
         messages,
         temperature: 0.2,
-        max_tokens: 800,
       }),
     })
-
-    if (!res.ok) {
-      const text = await res.text()
-      return NextResponse.json({ reply: `OpenAI error: ${text}` }, { status: res.status })
-    }
 
     const data = await res.json()
     const reply = data.choices?.[0]?.message?.content ?? 'Нет ответа'
     return NextResponse.json({ reply })
   } catch (err) {
-    console.error('Chat route error', err)
-    return NextResponse.json({ reply: 'Server error' }, { status: 500 })
+    console.error(err)
+    return NextResponse.json({ reply: 'Ошибка сервера' }, { status: 500 })
   }
 }
