@@ -10,7 +10,6 @@ import {
   Menu,
   X,
   Car,
-  ChevronDown,
   MessageSquare
 } from 'lucide-react'
 import clsx from 'classnames'
@@ -18,8 +17,8 @@ import clsx from 'classnames'
 export default function Header() {
   const [theme, setTheme] = useState<'light' | 'dark'>('dark')
   const [lang, setLang] = useState<'ru' | 'en'>('ru')
-  const [langMenuOpen, setLangMenuOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [langMenuOpen, setLangMenuOpen] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [response, setResponse] = useState('')
@@ -27,7 +26,9 @@ export default function Header() {
   const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
-    const userLang = navigator.language.startsWith('en') ? 'en' : 'ru'
+    const userLang =
+      (localStorage.getItem('lang') as 'ru' | 'en') ||
+      (navigator.language.startsWith('en') ? 'en' : 'ru')
     setLang(userLang)
 
     const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null
@@ -43,15 +44,14 @@ export default function Header() {
   const toggleTheme = () => {
     const newTheme = theme === 'dark' ? 'light' : 'dark'
     setTheme(newTheme)
-    document.documentElement.classList.toggle('dark', newTheme === 'dark')
     localStorage.setItem('theme', newTheme)
+    document.documentElement.classList.toggle('dark', newTheme === 'dark')
   }
 
   const switchLang = (newLang: 'ru' | 'en') => {
     setLang(newLang)
+    localStorage.setItem('lang', newLang)
     setLangMenuOpen(false)
-    if (newLang === 'en') window.location.href = '/en'
-    else window.location.href = '/'
   }
 
   const NavLinks = () => (
@@ -63,7 +63,7 @@ export default function Header() {
     </>
   )
 
-  // AI-чат (использует OpenAI API)
+  // AI чат (API-заглушка)
   const handleChat = async () => {
     if (!prompt.trim()) return
     setLoading(true)
@@ -77,7 +77,7 @@ export default function Header() {
       const data = await res.json()
       setResponse(data.message || 'Нет ответа')
     } catch {
-      setResponse('Ошибка при подключении к серверу')
+      setResponse('Ошибка при подключении')
     } finally {
       setLoading(false)
     }
@@ -85,14 +85,15 @@ export default function Header() {
 
   return (
     <>
+      {/* HEADER */}
       <header
         className={clsx(
-          'fixed top-0 z-50 w-full transition-all duration-500 backdrop-blur-md border-b border-white/10',
-          scrolled ? 'bg-black/70 dark:bg-zinc-900/70 shadow-md' : 'bg-transparent'
+          'fixed top-0 z-50 w-full transition-all duration-500 backdrop-blur-lg border-b border-white/10',
+          scrolled ? 'bg-black/60 dark:bg-zinc-900/70 shadow-md' : 'bg-transparent'
         )}
       >
-        <div className="container flex items-center justify-between py-4">
-          {/* ЛОГОТИП */}
+        <div className="container mx-auto flex items-center justify-between py-4 px-4 md:px-8">
+          {/* ЛОГО */}
           <Link
             href="/"
             className="flex items-center gap-2 text-2xl font-bold text-gold hover:text-white transition-transform hover:scale-105"
@@ -101,47 +102,48 @@ export default function Header() {
             <span>Bvetra<span className="text-white/70">Pro</span></span>
           </Link>
 
-          {/* НАВИГАЦИЯ — ДЕСКТОП */}
+          {/* ДЕСКТОП */}
           <nav className="hidden md:flex items-center gap-6">
             <NavLinks />
 
-            {/* Тема */}
+            {/* THEME */}
             <button
               onClick={toggleTheme}
-              className="p-2 rounded-lg hover:bg-white/10 transition"
+              className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition flex items-center justify-center"
               title={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
             >
               {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
             </button>
 
-            {/* Язык */}
+            {/* LANGUAGE */}
             <div className="relative">
               <button
                 onClick={() => setLangMenuOpen(!langMenuOpen)}
-                className="flex items-center gap-1 px-3 py-2 rounded-lg hover:bg-white/10 transition"
+                className="flex items-center gap-2 px-3 py-2 rounded-full bg-white/5 hover:bg-white/10 transition"
               >
                 <Languages size={18} />
-                <span className="uppercase text-sm">{lang}</span>
-                <ChevronDown size={14} className="opacity-70" />
+                <span className="uppercase font-medium">{lang}</span>
               </button>
 
               {langMenuOpen && (
-                <div className="absolute right-0 mt-2 w-32 rounded-lg bg-zinc-800 border border-white/10 shadow-lg overflow-hidden">
+                <div className="absolute right-0 mt-2 w-44 rounded-2xl bg-zinc-900/95 border border-white/10 shadow-xl backdrop-blur-xl animate-fade-in">
                   <button
                     onClick={() => switchLang('ru')}
-                    className={`flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-white/10 ${
+                    className={`flex items-center gap-3 px-4 py-2 w-full hover:bg-white/10 rounded-lg transition ${
                       lang === 'ru' ? 'text-gold' : ''
                     }`}
                   >
-                    <Globe size={16} /> Русский
+                    <Globe size={16} />
+                    <span>Русский</span>
                   </button>
                   <button
                     onClick={() => switchLang('en')}
-                    className={`flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-white/10 ${
+                    className={`flex items-center gap-3 px-4 py-2 w-full hover:bg-white/10 rounded-lg transition ${
                       lang === 'en' ? 'text-gold' : ''
                     }`}
                   >
-                    <Globe size={16} /> English
+                    <Globe size={16} />
+                    <span>English</span>
                   </button>
                 </div>
               )}
@@ -156,7 +158,7 @@ export default function Header() {
             </Link>
           </nav>
 
-          {/* БУРГЕР */}
+          {/* МОБИЛЬНЫЙ БУРГЕР */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="md:hidden p-2 rounded-lg hover:bg-white/10 transition"
@@ -167,37 +169,52 @@ export default function Header() {
 
         {/* МОБИЛЬНОЕ МЕНЮ */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-white/10 bg-black/90 dark:bg-zinc-900/90 backdrop-blur-lg animate-fade-in">
+          <div className="md:hidden border-t border-white/10 bg-black/90 dark:bg-zinc-900/90 backdrop-blur-xl animate-fade-in">
             <div className="flex flex-col items-center gap-4 py-5">
               <NavLinks />
-              <button
-                onClick={toggleTheme}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-white/10 transition"
-              >
-                {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-                {theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
-              </button>
-              <div className="flex flex-col gap-2 w-full px-4">
+
+              <div className="flex gap-4">
                 <button
-                  onClick={() => switchLang('ru')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-white/10 transition ${
-                    lang === 'ru' ? 'text-gold' : ''
-                  }`}
+                  onClick={toggleTheme}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-white/10 transition"
                 >
-                  <Globe size={16} /> Русский
+                  {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+                  {theme === 'dark' ? 'Светлая' : 'Тёмная'}
                 </button>
+
                 <button
-                  onClick={() => switchLang('en')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-white/10 transition ${
-                    lang === 'en' ? 'text-gold' : ''
-                  }`}
+                  onClick={() => setLangMenuOpen(!langMenuOpen)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-white/10 transition"
                 >
-                  <Globe size={16} /> English
+                  <Languages size={18} />
+                  {lang.toUpperCase()}
                 </button>
               </div>
+
+              {langMenuOpen && (
+                <div className="flex flex-col gap-2 mt-2">
+                  <button
+                    onClick={() => switchLang('ru')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-white/10 transition ${
+                      lang === 'ru' ? 'text-gold' : ''
+                    }`}
+                  >
+                    <Globe size={16} /> Русский
+                  </button>
+                  <button
+                    onClick={() => switchLang('en')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-white/10 transition ${
+                      lang === 'en' ? 'text-gold' : ''
+                    }`}
+                  >
+                    <Globe size={16} /> English
+                  </button>
+                </div>
+              )}
+
               <Link
                 href="/order"
-                className="bg-gold text-black font-semibold px-5 py-2 rounded-xl hover:bg-white hover:text-black transition mt-2"
+                className="bg-gold text-black font-semibold px-5 py-2 rounded-xl hover:bg-white hover:text-black transition mt-3"
               >
                 Заказать
               </Link>
@@ -206,7 +223,7 @@ export default function Header() {
         )}
       </header>
 
-      {/* AI-CHAT BUTTON */}
+      {/* КНОПКА AI-ЧАТА */}
       <button
         onClick={() => setChatOpen(true)}
         className="fixed bottom-6 right-6 bg-gold text-black p-4 rounded-full shadow-lg hover:bg-white transition"
