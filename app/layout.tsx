@@ -3,6 +3,7 @@ import React from 'react'
 import Header from './components/Header'
 import Footer from './components/Footer'
 import SmartChat from './components/SmartChat'
+import { ThemeLangProvider } from './context/ThemeLangContext'
 
 export const metadata = {
   title: 'Bvetra — Корпоративные трансферы',
@@ -16,13 +17,15 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ru">
-      <head />
-      <body className="min-h-screen bg-graphite text-white antialiased">
-        <Header />
-        <main>{children}</main>
-        <Footer />
-        <SmartChat /> {/* AI-чат */}
+    <html lang="ru" suppressHydrationWarning>
+      <body className="min-h-screen antialiased bg-white text-black dark:bg-graphite dark:text-white transition-colors duration-300">
+        {/* Провайдер глобальной темы и языка */}
+        <ThemeLangProvider>
+          <Header />
+          <main>{children}</main>
+          <Footer />
+          <SmartChat /> {/* AI-чат */}
+        </ThemeLangProvider>
       </body>
     </html>
   )
