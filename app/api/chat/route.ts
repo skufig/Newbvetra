@@ -2,18 +2,17 @@ import { NextResponse } from 'next/server'
 
 export async function POST(req: Request) {
   try {
-    const { prompt } = await req.json()
-
-    if (!prompt || prompt.trim().length === 0) {
-      return NextResponse.json({ message: 'Введите запрос.' }, { status: 400 })
-    }
+    const { message, history = [] } = await req.json()
 
     const apiKey = process.env.OPENAI_API_KEY
-    if (!apiKey) {
-      return NextResponse.json({ message: 'Ключ OpenAI не найден.' }, { status: 500 })
-    }
+    if (!apiKey) return NextResponse.json({ reply: 'OpenAI API key not configured' }, { status: 500 })
 
-    // Отправляем запрос в OpenAI
+    const messages = [
+      { role: 'system', content: 'Ты — виртуальный ассистент компании Bvetra. Отвечай дружелюбно и по делу. Если пользователь просит оформить заказ, предложи кнопку "Оформить заказ".' },
+      ...history.map((m: any) => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content })),
+      { role: 'user', content: message },
+    ]
+
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -22,28 +21,22 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content:
-              'Ты — вежливый AI-помощник компании Bvetra. Отвечай кратко и по делу, на русском языке, помогай с услугами и заказами трансфера.',
-          },
-          { role: 'user', content: prompt },
-        ],
+        messages,
+        temperature: 0.2,
+        max_tokens: 800,
       }),
     })
 
     if (!res.ok) {
-      const error = await res.text()
-      return NextResponse.json({ message: `Ошибка OpenAI: ${error}` }, { status: res.status })
+      const text = await res.text()
+      return NextResponse.json({ reply: `OpenAI error: ${text}` }, { status: res.status })
     }
 
     const data = await res.json()
-    const message = data.choices?.[0]?.message?.content || 'Нет ответа от модели.'
-
-    return NextResponse.json({ message })
-  } catch (error) {
-    console.error('Chat API error:', error)
-    return NextResponse.json({ message: 'Ошибка сервера.' }, { status: 500 })
+    const reply = data.choices?.[0]?.message?.content ?? 'Нет ответа'
+    return NextResponse.json({ reply })
+  } catch (err) {
+    console.error('Chat route error', err)
+    return NextResponse.json({ reply: 'Server error' }, { status: 500 })
   }
 }
