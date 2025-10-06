@@ -1,20 +1,34 @@
-import { NextRequest, NextResponse } from 'next/server'
-export async function POST(req: NextRequest) {
-  const body = await req.json()
-  const message = body?.message || ''
-  const OPENAI = process.env.OPENAI_API_KEY || ''
-  if (!OPENAI) return NextResponse.json({ reply: 'Привет! Я здесь чтобы помочь. (OpenAI API не настроен).' })
+import { NextResponse } from 'next/server'
+
+export async function POST(req: Request) {
   try {
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+    const { message, history = [] } = await req.json()
+
+    const apiKey = process.env.OPENAI_API_KEY
+    if (!apiKey) {
+      return NextResponse.json({ error: 'OpenAI API key missing' }, { status: 500 })
+    }
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI}` },
-      body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'user', content: message }], max_tokens: 500 })
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'Ты — виртуальный ассистент компании Bvetra. Отвечай дружелюбно и профессионально.' },
+          ...history,
+          { role: 'user', content: message },
+        ],
+      }),
     })
-    const data = await r.json()
-    const reply = data?.choices?.[0]?.message?.content || 'Извините, нет ответа'
-    return NextResponse.json({ reply })
+
+    const data = await response.json()
+    return NextResponse.json({ reply: data.choices?.[0]?.message?.content ?? 'Ошибка при получении ответа.' })
   } catch (err) {
     console.error(err)
-    return NextResponse.json({ reply: 'Ошибка при обработке запроса' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
