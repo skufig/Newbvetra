@@ -1,3 +1,4 @@
+// app/api/order/route.ts
 import { NextResponse } from 'next/server'
 
 type Order = {
@@ -8,6 +9,7 @@ type Order = {
   datetime?: string
   notes?: string
   carClass?: string
+  passengers?: number | string
 }
 
 export async function POST(req: Request) {
@@ -23,24 +25,26 @@ export async function POST(req: Request) {
     const results: any = { telegram: null, bitrix: null }
 
     // Telegram
-    const tgToken = process.env.TELEGRAM_BOT_TOKEN
-    const tgChatId = process.env.TELEGRAM_CHAT_ID
+    const tgToken = process.env.TELEGRAM_BOT_TOKEN || ''
+    const tgChatId = process.env.TELEGRAM_CHAT_ID || ''
     if (tgToken && tgChatId) {
       try {
-        const lines: string[] = []
-        lines.push('Новый заказ (Bvetra):')
-        lines.push(`Имя: ${order.name}`)
-        lines.push(`Телефон: ${order.phone}`)
-        if (order.pickup) lines.push(`Подача: ${order.pickup}`)
-        if (order.dropoff) lines.push(`Назначение: ${order.dropoff}`)
-        if (order.datetime) lines.push(`Время: ${order.datetime}`)
-        if (order.carClass) lines.push(`Класс: ${order.carClass}`)
-        if (order.notes) lines.push(`Примечание: ${order.notes}`)
+        const lines = [
+          `🚖 *Новый заказ Bvetra*`,
+          `*Клиент:* ${order.name}`,
+          `*Телефон:* ${order.phone}`,
+          `*Подача:* ${order.pickup || '-'}`,
+          `*Назначение:* ${order.dropoff || '-'}`,
+          `*Дата/Время:* ${order.datetime || '-'}`,
+          `*Класс авто:* ${order.carClass || '-'}`,
+          `*Пассажиры:* ${order.passengers || '-'}`,
+          `*Примечание:* ${order.notes || '-'}`,
+        ]
         if (chatHistory?.length) {
-          lines.push('')
-          lines.push('История чата:')
-          chatHistory.slice(-6).forEach((m: any) => {
-            const who = m.role === 'user' ? 'Клиент' : m.role === 'assistant' ? 'AI' : m.role
+          lines.push('', '*История чата:*')
+          const last = chatHistory.slice(-6)
+          last.forEach((m: any) => {
+            const who = m.role === 'user' ? 'Пользователь' : m.role === 'assistant' ? 'AI' : m.role
             lines.push(`- ${who}: ${String(m.content).slice(0, 300)}`)
           })
         }
@@ -48,15 +52,18 @@ export async function POST(req: Request) {
         const tgRes = await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: tgChatId, text: lines.join('\n') }),
+          body: JSON.stringify({
+            chat_id: tgChatId,
+            text: lines.join('\n'),
+            parse_mode: 'Markdown',
+          }),
         })
         results.telegram = await tgRes.json()
       } catch (e) {
-        console.error('telegram error', e)
         results.telegram = { error: String(e) }
       }
     } else {
-      results.telegram = { skipped: true, message: 'Telegram not configured' }
+      results.telegram = { skipped: true, message: 'telegram env not set' }
     }
 
     // Bitrix
@@ -64,32 +71,27 @@ export async function POST(req: Request) {
     if (bitrixWebhook) {
       try {
         const fields: any = {
-          TITLE: `Заказ: ${order.name}`,
+          TITLE: `Заказ от ${order.name}`,
           NAME: order.name,
-          PHONE: order.phone ? [{ VALUE: order.phone, VALUE_TYPE: 'WORK' }] : [],
-          COMMENTS: [
-            order.pickup ? `Подача: ${order.pickup}` : '',
-            order.dropoff ? `Назначение: ${order.dropoff}` : '',
-            order.datetime ? `Время: ${order.datetime}` : '',
-            order.carClass ? `Класс: ${order.carClass}` : '',
-            order.notes ? `Примечание: ${order.notes}` : '',
-          ].filter(Boolean).join('\n'),
+          PHONE: [{ VALUE: order.phone, VALUE_TYPE: 'WORK' }],
+          COMMENTS: `Подача: ${order.pickup || '-'}\nНазначение: ${order.dropoff || '-'}\nДата/Время: ${order.datetime || '-'}\nКласс: ${order.carClass || '-'}\nПассажиры: ${order.passengers || '-'}\nПримечание: ${order.notes || '-'}`,
         }
-        const body = { fields, params: { REGISTER_SONET_EVENT: 'Y' } }
-        const url = `${bitrixWebhook.replace(/\/$/, '')}/crm.lead.add.json`
-        const br = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        const br = await fetch(`${bitrixWebhook.replace(/\/$/, '')}/crm.lead.add.json`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields, params: { REGISTER_SONET_EVENT: 'Y' } }),
+        })
         results.bitrix = await br.json()
       } catch (e) {
-        console.error('bitrix error', e)
         results.bitrix = { error: String(e) }
       }
     } else {
-      results.bitrix = { skipped: true, message: 'Bitrix not configured' }
+      results.bitrix = { skipped: true, message: 'BITRIX_WEBHOOK_URL not set' }
     }
 
     return NextResponse.json({ ok: true, results })
   } catch (err) {
-    console.error('order route err', err)
+    console.error(err)
     return NextResponse.json({ ok: false, message: 'Server error' }, { status: 500 })
   }
 }
