@@ -1,4 +1,3 @@
-// app/api/order/route.ts
 import { NextResponse } from 'next/server'
 
 type Order = {
@@ -8,6 +7,7 @@ type Order = {
   dropoff?: string
   datetime?: string
   notes?: string
+  carClass?: string
 }
 
 export async function POST(req: Request) {
@@ -17,35 +17,45 @@ export async function POST(req: Request) {
     const chatHistory: any[] = payload.chatHistory || []
 
     if (!order || !order.name || !order.phone) {
-      return NextResponse.json({ ok: false, message: 'Имя и телефон обязательны' }, { status: 400 })
+      return NextResponse.json(
+        { ok: false, message: 'Имя и телефон обязательны' },
+        { status: 400 }
+      )
     }
 
     const results: any = { telegram: null, bitrix: null }
 
-    // --------------------
-    // 1) Telegram notify
-    // --------------------
+    // ==========================
+    // 🟡 1) Telegram уведомление
+    // ==========================
     const tgToken = process.env.TELEGRAM_BOT_TOKEN
     const tgChatId = process.env.TELEGRAM_CHAT_ID
 
     if (tgToken && tgChatId) {
       try {
-        const textLines = [
-          `🚖 *Новый заказ Bvetra*`,
-          `*Клиент:* ${order.name}`,
-          `*Телефон:* ${order.phone}`,
-        ]
-        if (order.pickup) textLines.push(`*Подача:* ${order.pickup}`)
-        if (order.dropoff) textLines.push(`*Назначение:* ${order.dropoff}`)
-        if (order.datetime) textLines.push(`*Время:* ${order.datetime}`)
-        if (order.notes) textLines.push(`*Примечание:* ${order.notes}`)
-        if (chatHistory && chatHistory.length) {
-          textLines.push('', '*История чата:*')
-          const last = chatHistory.slice(-6) // последние 6 сообщений
-          last.forEach((m: any) => {
-            const who = m.role === 'user' ? 'Пользователь' : m.role === 'assistant' ? 'AI' : m.role
-            textLines.push(`- ${who}: ${String(m.content).slice(0, 300)}`)
-          })
+        const textLines: string[] = [
+          `🚖 *Новый заказ через AI-ассистента Bvetra!*`,
+          ``,
+          `👤 *Имя:* ${order.name}`,
+          `📞 *Телефон:* ${order.phone}`,
+          order.pickup ? `📍 *Подача:* ${order.pickup}` : '',
+          order.dropoff ? `🎯 *Назначение:* ${order.dropoff}` : '',
+          order.datetime ? `🕓 *Время:* ${order.datetime}` : '',
+          order.carClass ? `🚘 *Класс авто:* ${order.carClass}` : '',
+          order.notes ? `📝 *Примечание:* ${order.notes}` : '',
+          ``,
+          `💬 *История чата:*`,
+        ].filter(Boolean)
+
+        const lastMessages = chatHistory.slice(-6)
+        for (const m of lastMessages) {
+          const who =
+            m.role === 'user'
+              ? '👤 Клиент'
+              : m.role === 'assistant'
+              ? '🤖 AI'
+              : '💬'
+          textLines.push(`${who}: ${m.content}`)
         }
 
         const tgRes = await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
@@ -57,38 +67,53 @@ export async function POST(req: Request) {
             parse_mode: 'Markdown',
           }),
         })
+
         results.telegram = await tgRes.json()
       } catch (e) {
         console.error('Telegram send error', e)
         results.telegram = { error: String(e) }
       }
     } else {
-      results.telegram = { skipped: true, message: 'TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set' }
+      results.telegram = {
+        skipped: true,
+        message: 'TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID не указаны',
+      }
     }
 
-    // --------------------
-    // 2) Bitrix lead create
-    // --------------------
-    // EXPECTED: BITRIX_WEBHOOK_URL = "https://<your-domain>.bitrix24.ru/rest/<userId>/<webhookToken>"
-    // We'll call: `${BITRIX_WEBHOOK_URL}/crm.lead.add.json`
-    const bitrixWebhook = process.env.BITRIX_WEBHOOK_URL || '' // can be empty
+    // ==========================
+    // 🟢 2) Bitrix24 — создание лида
+    // ==========================
+    const bitrixWebhook = process.env.BITRIX_WEBHOOK_URL || ''
     if (bitrixWebhook) {
       try {
         const fields: any = {
-          TITLE: `Заказ от ${order.name}`,
+          TITLE: `Новый заказ через сайт — ${order.name}`,
           NAME: order.name,
           PHONE: [{ VALUE: order.phone, VALUE_TYPE: 'WORK' }],
-          COMMENTS: `Подача: ${order.pickup || '-'}\nНазначение: ${order.dropoff || '-'}\nВремя: ${order.datetime || '-'}\nПримечание: ${order.notes || '-'}`,
-          // дополнительные поля можно добавить тут
+          COMMENTS: [
+            order.pickup ? `Подача: ${order.pickup}` : '',
+            order.dropoff ? `Назначение: ${order.dropoff}` : '',
+            order.datetime ? `Время: ${order.datetime}` : '',
+            order.carClass ? `Класс авто: ${order.carClass}` : '',
+            order.notes ? `Примечание: ${order.notes}` : '',
+          ]
+            .filter(Boolean)
+            .join('\n'),
         }
 
-        const body = { fields, params: { REGISTER_SONET_EVENT: 'Y' } }
+        const body = {
+          fields,
+          params: { REGISTER_SONET_EVENT: 'Y' },
+        }
 
-        const br = await fetch(`${bitrixWebhook.replace(/\/$/, '')}/crm.lead.add.json`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        })
+        const br = await fetch(
+          `${bitrixWebhook.replace(/\/$/, '')}/crm.lead.add.json`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          }
+        )
 
         results.bitrix = await br.json()
       } catch (e) {
@@ -96,16 +121,25 @@ export async function POST(req: Request) {
         results.bitrix = { error: String(e) }
       }
     } else {
-      // если webhook не задан — возвращаем рандомный заглушечный ответ (как ты просил)
-      results.bitrix = { skipped: true, message: 'BITRIX_WEBHOOK_URL not set — placeholder used' }
+      results.bitrix = {
+        skipped: true,
+        message: 'BITRIX_WEBHOOK_URL не задан — пропуск отправки',
+      }
     }
 
-    // --------------------
-    // 3) Ответ клиенту
-    // --------------------
-    return NextResponse.json({ ok: true, results })
+    // ==========================
+    // 🟣 3) Ответ клиенту
+    // ==========================
+    return NextResponse.json({
+      ok: true,
+      message: 'Заказ успешно отправлен',
+      results,
+    })
   } catch (err) {
-    console.error('order route error', err)
-    return NextResponse.json({ ok: false, message: 'Server error' }, { status: 500 })
+    console.error('Order route error', err)
+    return NextResponse.json(
+      { ok: false, message: 'Ошибка сервера при обработке заказа' },
+      { status: 500 }
+    )
   }
 }
