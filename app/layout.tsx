@@ -18,13 +18,14 @@ export const metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ru" suppressHydrationWarning>
-      <body className="min-h-screen antialiased bg-white text-black dark:bg-graphite dark:text-white transition-colors duration-300">
-        {/* Провайдер глобальной темы и языка */}
+      <body className="min-h-screen bg-black text-white antialiased transition-colors duration-300">
         <ThemeLangProvider>
           <Header />
-          <main>{children}</main>
+          <main className="flex flex-col flex-1">{children}</main>
           <Footer />
-          <SmartChat /> {/* AI-чат */}
+          <div className="chat-widget">
+            <SmartChat />
+          </div>
         </ThemeLangProvider>
       </body>
     </html>
