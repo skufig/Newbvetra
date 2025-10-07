@@ -17,129 +17,79 @@ export async function POST(req: Request) {
     const chatHistory: any[] = payload.chatHistory || []
 
     if (!order || !order.name || !order.phone) {
-      return NextResponse.json(
-        { ok: false, message: 'Имя и телефон обязательны' },
-        { status: 400 }
-      )
+      return NextResponse.json({ ok: false, message: 'Имя и телефон обязательны' }, { status: 400 })
     }
 
     const results: any = { telegram: null, bitrix: null }
 
-    // ==========================
-    // 🟡 1) Telegram уведомление
-    // ==========================
+    // Telegram
     const tgToken = process.env.TELEGRAM_BOT_TOKEN
     const tgChatId = process.env.TELEGRAM_CHAT_ID
-
     if (tgToken && tgChatId) {
       try {
-        const textLines: string[] = [
-          `🚖 *Новый заказ через AI-ассистента Bvetra!*`,
-          ``,
-          `👤 *Имя:* ${order.name}`,
-          `📞 *Телефон:* ${order.phone}`,
-          order.pickup ? `📍 *Подача:* ${order.pickup}` : '',
-          order.dropoff ? `🎯 *Назначение:* ${order.dropoff}` : '',
-          order.datetime ? `🕓 *Время:* ${order.datetime}` : '',
-          order.carClass ? `🚘 *Класс авто:* ${order.carClass}` : '',
-          order.notes ? `📝 *Примечание:* ${order.notes}` : '',
-          ``,
-          `💬 *История чата:*`,
-        ].filter(Boolean)
-
-        const lastMessages = chatHistory.slice(-6)
-        for (const m of lastMessages) {
-          const who =
-            m.role === 'user'
-              ? '👤 Клиент'
-              : m.role === 'assistant'
-              ? '🤖 AI'
-              : '💬'
-          textLines.push(`${who}: ${m.content}`)
+        const lines: string[] = []
+        lines.push('Новый заказ (Bvetra):')
+        lines.push(`Имя: ${order.name}`)
+        lines.push(`Телефон: ${order.phone}`)
+        if (order.pickup) lines.push(`Подача: ${order.pickup}`)
+        if (order.dropoff) lines.push(`Назначение: ${order.dropoff}`)
+        if (order.datetime) lines.push(`Время: ${order.datetime}`)
+        if (order.carClass) lines.push(`Класс: ${order.carClass}`)
+        if (order.notes) lines.push(`Примечание: ${order.notes}`)
+        if (chatHistory?.length) {
+          lines.push('')
+          lines.push('История чата:')
+          chatHistory.slice(-6).forEach((m: any) => {
+            const who = m.role === 'user' ? 'Клиент' : m.role === 'assistant' ? 'AI' : m.role
+            lines.push(`- ${who}: ${String(m.content).slice(0, 300)}`)
+          })
         }
 
         const tgRes = await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: tgChatId,
-            text: textLines.join('\n'),
-            parse_mode: 'Markdown',
-          }),
+          body: JSON.stringify({ chat_id: tgChatId, text: lines.join('\n') }),
         })
-
         results.telegram = await tgRes.json()
       } catch (e) {
-        console.error('Telegram send error', e)
+        console.error('telegram error', e)
         results.telegram = { error: String(e) }
       }
     } else {
-      results.telegram = {
-        skipped: true,
-        message: 'TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID не указаны',
-      }
+      results.telegram = { skipped: true, message: 'Telegram not configured' }
     }
 
-    // ==========================
-    // 🟢 2) Bitrix24 — создание лида
-    // ==========================
+    // Bitrix
     const bitrixWebhook = process.env.BITRIX_WEBHOOK_URL || ''
     if (bitrixWebhook) {
       try {
         const fields: any = {
-          TITLE: `Новый заказ через сайт — ${order.name}`,
+          TITLE: `Заказ: ${order.name}`,
           NAME: order.name,
-          PHONE: [{ VALUE: order.phone, VALUE_TYPE: 'WORK' }],
+          PHONE: order.phone ? [{ VALUE: order.phone, VALUE_TYPE: 'WORK' }] : [],
           COMMENTS: [
             order.pickup ? `Подача: ${order.pickup}` : '',
             order.dropoff ? `Назначение: ${order.dropoff}` : '',
             order.datetime ? `Время: ${order.datetime}` : '',
-            order.carClass ? `Класс авто: ${order.carClass}` : '',
+            order.carClass ? `Класс: ${order.carClass}` : '',
             order.notes ? `Примечание: ${order.notes}` : '',
-          ]
-            .filter(Boolean)
-            .join('\n'),
+          ].filter(Boolean).join('\n'),
         }
-
-        const body = {
-          fields,
-          params: { REGISTER_SONET_EVENT: 'Y' },
-        }
-
-        const br = await fetch(
-          `${bitrixWebhook.replace(/\/$/, '')}/crm.lead.add.json`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-          }
-        )
-
+        const body = { fields, params: { REGISTER_SONET_EVENT: 'Y' } }
+        const url = `${bitrixWebhook.replace(/\/$/, '')}/crm.lead.add.json`
+        const br = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
         results.bitrix = await br.json()
       } catch (e) {
-        console.error('Bitrix error', e)
+        console.error('bitrix error', e)
         results.bitrix = { error: String(e) }
       }
     } else {
-      results.bitrix = {
-        skipped: true,
-        message: 'BITRIX_WEBHOOK_URL не задан — пропуск отправки',
-      }
+      results.bitrix = { skipped: true, message: 'Bitrix not configured' }
     }
 
-    // ==========================
-    // 🟣 3) Ответ клиенту
-    // ==========================
-    return NextResponse.json({
-      ok: true,
-      message: 'Заказ успешно отправлен',
-      results,
-    })
+    return NextResponse.json({ ok: true, results })
   } catch (err) {
-    console.error('Order route error', err)
-    return NextResponse.json(
-      { ok: false, message: 'Ошибка сервера при обработке заказа' },
-      { status: 500 }
-    )
+    console.error('order route err', err)
+    return NextResponse.json({ ok: false, message: 'Server error' }, { status: 500 })
   }
 }
