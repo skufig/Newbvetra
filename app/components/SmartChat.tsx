@@ -1,54 +1,47 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { Send, MessageCircle, X, Trash, Mic, MicOff } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import {
+  Send,
+  MessageCircle,
+  X,
+  Trash,
+  Mic,
+  MicOff,
+  Check,
+  Loader2,
+} from 'lucide-react'
 import clsx from 'classnames'
+import { formatPhoneForDisplay, isValidPhone } from '../../lib/phone'
 
-type Msg = { role: 'user' | 'assistant' | 'system' | 'order'; content: string }
+type Msg = {
+  id: string
+  role: 'user' | 'assistant' | 'system' | 'order'
+  content: string
+  meta?: any
+}
 
-const QUICK = [
+const quickReplies = [
   'Как заказать трансфер?',
   'Сколько стоит поездка в аэропорт?',
   'Можно ли заказать на завтра?',
   'Какие автомобили доступны?',
 ]
 
-const CAR_CLASSES = [
-  { id: 'standard', label: 'Стандарт' },
-  { id: 'comfort', label: 'Комфорт' },
-  { id: 'business', label: 'Бизнес' },
-  { id: 'minivan', label: 'Минивэн' },
-]
+const carClasses = ['Стандарт', 'Комфорт', 'Бизнес', 'Минивэн']
 
 export default function SmartChat() {
   const [open, setOpen] = useState(false)
-  const [input, setInput] = useState('')
   const [messages, setMessages] = useState<Msg[]>([])
-  const [loading, setLoading] = useState(false)
+  const [input, setInput] = useState('')
   const [listening, setListening] = useState(false)
+  const [orderDraft, setOrderDraft] = useState<any>({})
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [sendingOrder, setSendingOrder] = useState(false)
+  const [lastAssistantId, setLastAssistantId] = useState<string | null>(null)
   const recognitionRef = useRef<any>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
-  // order state (if user triggers "Заказ" flow)
-  const [orderOpen, setOrderOpen] = useState(false)
-  const [orderSending, setOrderSending] = useState(false)
-  const [orderResult, setOrderResult] = useState<string | null>(null)
-  const [order, setOrder] = useState({
-    name: '',
-    phone: '',
-    pickup: '',
-    dropoff: '',
-    datetime: '',
-    notes: '',
-    carClass: '',
-  })
-
-  // keyboard offset for mobile
-  const [isFocused, setIsFocused] = useState(false)
-  const [keyboardOffset, setKeyboardOffset] = useState(0)
-
-  // load history
   useEffect(() => {
     const raw = localStorage.getItem('bvetra_chat_history')
     if (raw) setMessages(JSON.parse(raw))
@@ -56,11 +49,13 @@ export default function SmartChat() {
 
   useEffect(() => {
     localStorage.setItem('bvetra_chat_history', JSON.stringify(messages))
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight + 200
+    }
   }, [messages])
 
-  // speech recognition (optional)
   useEffect(() => {
+    // speech
     const w = window as any
     const SR = w.SpeechRecognition || w.webkitSpeechRecognition
     if (!SR) return
@@ -68,73 +63,14 @@ export default function SmartChat() {
     rec.lang = 'ru-RU'
     rec.interimResults = false
     rec.onresult = (e: any) => {
-      const text = Array.from(e.results).map((r: any) => r[0].transcript).join('')
+      const text = Array.from(e.results)
+        .map((r: any) => r[0].transcript)
+        .join('')
       setInput((p) => (p ? p + ' ' + text : text))
     }
     rec.onend = () => setListening(false)
     recognitionRef.current = rec
   }, [])
-
-  // visualViewport keyboard offset (mobile)
-  useEffect(() => {
-    const handleViewport = () => {
-      const vv = (window as any).visualViewport
-      if (vv && isFocused) {
-        const kb = Math.max(0, window.innerHeight - vv.height - (vv.offsetTop || 0))
-        setKeyboardOffset(kb)
-      } else {
-        setKeyboardOffset(0)
-      }
-    }
-    const vv = (window as any).visualViewport
-    if (vv) {
-      vv.addEventListener('resize', handleViewport)
-      vv.addEventListener('scroll', handleViewport)
-    }
-    return () => {
-      if (vv) {
-        vv.removeEventListener('resize', handleViewport)
-        vv.removeEventListener('scroll', handleViewport)
-      }
-    }
-  }, [isFocused])
-
-  const openChat = () => setOpen(true)
-  const closeChat = () => setOpen(false)
-
-  const append = (m: Msg) => setMessages((s) => [...s, m])
-
-  // send a message to /api/chat
-  const sendMessage = async (msgText?: string) => {
-    const message = msgText ?? input
-    if (!message.trim()) return
-    append({ role: 'user', content: message })
-    setInput('')
-    setLoading(true)
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, history: messages }),
-      })
-      const data = await res.json()
-      const reply = data.reply || data.message || 'Извините, нет ответа'
-      append({ role: 'assistant', content: reply })
-      // if assistant suggests opening order modal via text pattern, we can auto-open:
-      if (/подтвердить заказ|оформить заказ|оформление заказа/i.test(reply)) {
-        setOrderOpen(true)
-      }
-    } catch (e) {
-      append({ role: 'assistant', content: 'Ошибка при обращении к серверу' })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const clearChat = () => {
-    setMessages([])
-    localStorage.removeItem('bvetra_chat_history')
-  }
 
   const startListening = () => {
     if (!recognitionRef.current) return alert('Голосовой ввод не поддерживается')
@@ -146,223 +82,383 @@ export default function SmartChat() {
     setListening(false)
   }
 
-  // Phone input simple mask (accept any international)
-  const handlePhoneChange = (val: string) => {
-    // allow digits, +, spaces, parentheses, dashes
-    const cleaned = val.replace(/[^\d+\- ()]/g, '')
-    setOrder({ ...order, phone: cleaned })
+  const append = (m: Msg) => setMessages((s) => [...s, m])
+
+  // streaming chat: POST -> /api/chat/stream => ReadableStream text chunks
+  const sendMessage = async (text?: string) => {
+    const messageText = (text ?? input).trim()
+    if (!messageText) return
+    const userMsg: Msg = {
+      id: 'u_' + Date.now(),
+      role: 'user',
+      content: messageText,
+    }
+    append(userMsg)
+    setInput('')
+
+    // create placeholder assistant message (will be filled progressively)
+    const assistantId = 'a_' + Date.now()
+    setLastAssistantId(assistantId)
+    append({ id: assistantId, role: 'assistant', content: '' })
+
+    try {
+      const res = await fetch('/api/chat/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: messageText, history: messages }),
+      })
+      if (!res.ok) {
+        // update assistant with error
+        setMessages((s) =>
+          s.map((m) =>
+            m.id === assistantId
+              ? { ...m, content: 'Ошибка сервера при получении ответа' }
+              : m
+          )
+        )
+        return
+      }
+
+      // read stream
+      const reader = res.body!.getReader()
+      const decoder = new TextDecoder()
+      let done = false
+      let full = ''
+
+      while (!done) {
+        const { value, done: d } = await reader.read()
+        done = d
+        if (value) {
+          const chunk = decoder.decode(value)
+          full += chunk
+          // update assistant message progressively
+          setMessages((s) =>
+            s.map((m) => (m.id === assistantId ? { ...m, content: full } : m))
+          )
+        }
+      }
+
+      // after complete, try to let assistant output contain actionable JSON commands (optional)
+      // e.g. assistant may include a JSON block with "order": { ... } — we attempt to parse
+      try {
+        const maybeJson = /```json\n([\s\S]*?)\n```/.exec(full)
+        const payloadStr = maybeJson ? maybeJson[1] : null
+        if (payloadStr) {
+          const parsed = JSON.parse(payloadStr)
+          if (parsed?.order) {
+            setOrderDraft((prev: any) => ({ ...prev, ...parsed.order }))
+            // show confirm prompt
+            setConfirmOpen(true)
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    } catch (err) {
+      setMessages((s) =>
+        s.map((m) =>
+          m.id === assistantId
+            ? { ...m, content: 'Ошибка при подключении к API' }
+            : m
+        )
+      )
+    } finally {
+      if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
   }
 
-  // submit order to /api/order (sends chatHistory too)
+  const clearChat = () => {
+    setMessages([])
+    localStorage.removeItem('bvetra_chat_history')
+  }
+
+  // Chat-driven "Собранный заказ" подтверждение и отправка
+  const openConfirmForOrder = (order?: any) => {
+    setOrderDraft((prev: any) => ({ ...prev, ...(order || {}) }))
+    setConfirmOpen(true)
+  }
+
   const submitOrder = async () => {
-    if (!order.name || !order.phone) {
-      setOrderResult('Укажите имя и телефон')
+    // minimal validation (phone flexible)
+    if (!orderDraft.name || !orderDraft.phone) {
+      alert('Пожалуйста, укажите имя и телефон в форме подтверждения.')
       return
     }
-    setOrderSending(true)
+    setSendingOrder(true)
     try {
       const res = await fetch('/api/order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order, chatHistory: messages }),
+        body: JSON.stringify({ order: orderDraft, chatHistory: messages }),
       })
       const data = await res.json()
       if (res.ok) {
-        setOrderResult('Заказ отправлен. Спасибо!')
+        // append order message in chat
         append({
+          id: 'ord_' + Date.now(),
           role: 'order',
-          content: `Заказ: ${order.name} ${order.phone} — ${order.pickup} → ${order.dropoff} ${order.datetime} (${order.carClass})`,
+          content: `Заказ отправлен: ${orderDraft.name} ${orderDraft.phone} — ${orderDraft.pickup || '-'} → ${orderDraft.dropoff || '-'} (${orderDraft.datetime || '-'})`,
         })
-        setOrderOpen(false)
+        setConfirmOpen(false)
+        setOrderDraft({})
+        alert('Заказ отправлен — проверяйте Telegram/CRM.')
       } else {
-        setOrderResult(data.message || 'Ошибка при отправке')
+        alert('Ошибка отправки: ' + (data.message || JSON.stringify(data)))
       }
     } catch (e) {
-      setOrderResult('Ошибка соединения')
+      alert('Ошибка сети при отправке заказа')
     } finally {
-      setOrderSending(false)
+      setSendingOrder(false)
     }
   }
 
-  // helper: choose car class from chat buttons
-  const chooseCarClass = (cls: string) => {
-    setOrder((o) => ({ ...o, carClass: cls }))
-    append({ role: 'user', content: `Выбрал класс: ${cls}` })
+  // helper to add prefilled car class quick buttons
+  const addCarClassHint = (cls: string) => {
+    // put to order draft and send a message telling assistant
+    setOrderDraft((p: any) => ({ ...p, carClass: cls }))
+    sendMessage(`Класс автомобиля: ${cls}`)
   }
 
-  const bottomStyle = 18 + (keyboardOffset > 0 ? keyboardOffset : 0)
-
+  // UI
   return (
     <>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: 40 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 40 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            style={{ bottom: bottomStyle }}
-            className="fixed right-5 z-50 w-[min(420px,92vw)]"
-          >
-            <div className="bg-neutral-900 border border-neutral-700 rounded-2xl p-3 shadow-xl">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <MessageCircle />
-                  <span className="text-sm font-semibold">AI ассистент</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setOrderOpen(true)}
-                    className="bg-gold text-black text-sm px-2 py-1 rounded"
-                  >
-                    Оформить заказ
-                  </button>
-                  <button onClick={clearChat} title="Очистить" className="p-1 rounded hover:bg-white/5">
-                    <Trash size={16} />
-                  </button>
-                  <button onClick={closeChat} title="Закрыть" className="p-1 rounded hover:bg-white/5">
-                    <X size={16} />
-                  </button>
-                </div>
+      {open ? (
+        <div
+          className="fixed z-50 right-5 bottom-5 w-[min(420px,94vw)] max-h-[86vh] flex flex-col"
+          role="dialog"
+          aria-label="AI ассистент"
+        >
+          <div className="bg-neutral-900 border border-neutral-700 rounded-2xl p-3 shadow-xl flex flex-col h-full">
+            {/* header */}
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <MessageCircle />
+                <span className="text-sm font-semibold">AI ассистент</span>
               </div>
-
-              <div ref={scrollRef} className="h-[55vh] max-h-[60vh] overflow-y-auto space-y-2 mb-2 px-1 text-sm">
-                {messages.length === 0 && (
-                  <div className="text-neutral-400 px-2">Здравствуйте! Задайте вопрос или оформите заказ.</div>
-                )}
-                {messages.map((m, i) => (
-                  <div
-                    key={i}
-                    className={clsx('p-2 rounded-xl mx-2', {
-                      'bg-gold text-black ml-auto max-w-[80%]': m.role === 'user',
-                      'bg-neutral-800 text-white max-w-[85%]': m.role === 'assistant',
-                      'bg-white/5 text-white max-w-[85%]': m.role === 'order',
-                    })}
-                  >
-                    {m.content}
-                  </div>
-                ))}
-              </div>
-
-              {/* quick replies */}
-              <div className="flex flex-wrap gap-2 mb-2 px-1">
-                {QUICK.map((q) => (
-                  <button
-                    key={q}
-                    onClick={() => sendMessage(q)}
-                    className="text-xs bg-white/5 px-2 py-1 rounded hover:bg-white/10"
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
-
-              {/* car class quick buttons */}
-              <div className="flex gap-2 items-center mb-2 px-1">
-                {CAR_CLASSES.map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => {
-                      chooseCarClass(c.label)
-                      // assist the assistant by sending a message too
-                      sendMessage(`Выбираю класс: ${c.label}`)
-                    }}
-                    className="text-sm px-3 py-1 rounded-lg bg-white/5 hover:bg-white/10"
-                  >
-                    {c.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex items-center gap-2 px-1">
-                <button onClick={() => (listening ? stopListening() : startListening())} className="p-2 rounded hover:bg-white/5">
-                  {listening ? <MicOff size={18} /> : <Mic size={18} />}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => openConfirmForOrder(orderDraft)}
+                  className="bg-gold text-black px-3 py-1 rounded text-sm hover:opacity-95"
+                >
+                  Оформить заказ
                 </button>
-
-                <input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Введите сообщение..."
-                  onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-                  onFocus={() => setIsFocused(true)}
-                  onBlur={() => setTimeout(() => setIsFocused(false), 120)}
-                  className="flex-1 bg-neutral-800 px-3 py-2 rounded-lg text-sm outline-none"
-                />
-
-                <button onClick={() => sendMessage()} disabled={loading} className="bg-gold text-black px-3 py-2 rounded-lg">
-                  <Send size={16} />
+                <button
+                  onClick={clearChat}
+                  title="Очистить"
+                  className="p-1 rounded hover:bg-white/5"
+                >
+                  <Trash size={16} />
+                </button>
+                <button
+                  onClick={() => setOpen(false)}
+                  title="Закрыть"
+                  className="p-1 rounded hover:bg-white/5"
+                >
+                  <X size={16} />
                 </button>
               </div>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
-      {/* floating open button */}
-      {!open && (
+            {/* messages */}
+            <div
+              ref={scrollRef}
+              className="flex-1 overflow-y-auto space-y-3 mb-2 px-1"
+              style={{ scrollbarGutter: 'stable' }}
+            >
+              {messages.length === 0 && (
+                <div className="text-neutral-400 px-2">
+                  Задайте вопрос или нажмите быстрый ответ.
+                </div>
+              )}
+
+              {messages.map((m) => (
+                <div
+                  key={m.id}
+                  className={clsx(
+                    'rounded-lg p-3 max-w-full break-words',
+                    m.role === 'user'
+                      ? 'bg-white text-black ml-auto max-w-[78%]'
+                      : m.role === 'assistant'
+                      ? 'bg-neutral-800 text-white max-w-[85%]'
+                      : m.role === 'order'
+                      ? 'bg-white/5 border border-white/8 text-white'
+                      : 'bg-white/10'
+                  )}
+                >
+                  {m.role === 'assistant' && m.content === '' ? (
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="animate-spin" size={16} /> Печатает...
+                    </div>
+                  ) : (
+                    <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* quick replies and car class */}
+            <div className="mb-2 flex flex-wrap gap-2">
+              {quickReplies.map((q) => (
+                <button
+                  key={q}
+                  onClick={() => sendMessage(q)}
+                  className="bg-white/5 px-3 py-1 rounded text-sm hover:bg-white/10"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+
+            <div className="mb-2 flex items-center gap-2 overflow-x-auto">
+              {carClasses.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => addCarClassHint(c)}
+                  className="bg-white/5 px-3 py-1 rounded text-sm hover:bg-white/10"
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+
+            {/* input */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => (listening ? stopListening() : startListening())}
+                className="p-2 rounded hover:bg-white/5"
+                title="Голосом"
+              >
+                {listening ? <MicOff size={16} /> : <Mic size={16} />}
+              </button>
+
+              <input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+                placeholder="Введите сообщение..."
+                className="flex-1 bg-neutral-800 px-3 py-2 rounded-lg text-sm outline-none"
+              />
+
+              <button
+                onClick={() => sendMessage()}
+                className="bg-gold text-black px-3 py-2 rounded-lg"
+                title="Отправить"
+              >
+                <Send size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
         <button
-          onClick={openChat}
+          onClick={() => setOpen(true)}
           className="fixed bottom-5 right-5 bg-gold text-black p-4 rounded-full shadow-lg hover:scale-105 transition-transform z-50"
-          title="Открыть чат"
+          aria-label="Открыть чат"
         >
           <MessageCircle />
         </button>
       )}
 
-      {/* ORDER modal */}
-      <AnimatePresence>
-        {orderOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center"
-          >
-            <div className="absolute inset-0 bg-black/60" onClick={() => setOrderOpen(false)} />
-            <motion.div
-              initial={{ y: 40, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 40, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="relative bg-neutral-900 border border-white/10 rounded-2xl p-6 w-[min(640px,96vw)] z-50"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-semibold">Оформление заказа</h3>
-                <button onClick={() => setOrderOpen(false)} className="p-1 rounded hover:bg-white/5">
-                  <X size={18} />
-                </button>
-              </div>
+      {/* Order confirm modal */}
+      {confirmOpen && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md bg-neutral-900 rounded-2xl p-5 border border-white/10">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-semibold text-lg">Подтвердите заказ</h3>
+              <button onClick={() => setConfirmOpen(false)}>
+                <X />
+              </button>
+            </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <input value={order.name} onChange={(e) => setOrder({ ...order, name: e.target.value })} placeholder="Имя" className="p-2 bg-neutral-800 rounded" />
-                <input value={order.phone} onChange={(e) => handlePhoneChange(e.target.value)} placeholder="Телефон (+...)" className="p-2 bg-neutral-800 rounded" />
-                <input value={order.pickup} onChange={(e) => setOrder({ ...order, pickup: e.target.value })} placeholder="Адрес подачи" className="p-2 bg-neutral-800 rounded md:col-span-2" />
-                <input value={order.dropoff} onChange={(e) => setOrder({ ...order, dropoff: e.target.value })} placeholder="Адрес назначения" className="p-2 bg-neutral-800 rounded md:col-span-2" />
-                <input value={order.datetime} onChange={(e) => setOrder({ ...order, datetime: e.target.value })} placeholder="Дата и время" className="p-2 bg-neutral-800 rounded" />
-                <select value={order.carClass} onChange={(e) => setOrder({ ...order, carClass: e.target.value })} className="p-2 bg-neutral-800 rounded">
-                  <option value="">Выберите класс авто</option>
-                  {CAR_CLASSES.map((c) => (
-                    <option key={c.id} value={c.label}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
-                <textarea value={order.notes} onChange={(e) => setOrder({ ...order, notes: e.target.value })} placeholder="Примечание" className="p-2 bg-neutral-800 rounded md:col-span-2" />
-              </div>
+            <div className="space-y-2 text-sm mb-3">
+              <label className="block text-xs text-neutral-400">Имя</label>
+              <input
+                value={orderDraft.name || ''}
+                onChange={(e) => setOrderDraft({ ...orderDraft, name: e.target.value })}
+                className="w-full p-2 bg-neutral-800 rounded"
+                placeholder="Имя"
+              />
 
-              <div className="flex items-center gap-3 mt-4">
-                <button onClick={submitOrder} disabled={orderSending} className="bg-gold text-black px-4 py-2 rounded">
-                  {orderSending ? 'Отправка...' : 'Отправить заказ'}
-                </button>
-                <button onClick={() => setOrderOpen(false)} className="px-4 py-2 border border-white/20 rounded">
-                  Отмена
-                </button>
-                <div className="ml-auto text-sm text-white/80">{orderResult}</div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              <label className="block text-xs text-neutral-400 mt-2">Телефон</label>
+              <input
+                value={orderDraft.phone || ''}
+                onChange={(e) =>
+                  setOrderDraft({ ...orderDraft, phone: formatPhoneForDisplay(e.target.value) })
+                }
+                className="w-full p-2 bg-neutral-800 rounded"
+                placeholder="+7 912 345-67-89"
+              />
+
+              <label className="block text-xs text-neutral-400 mt-2">Пункт подачи</label>
+              <input
+                value={orderDraft.pickup || ''}
+                onChange={(e) => setOrderDraft({ ...orderDraft, pickup: e.target.value })}
+                className="w-full p-2 bg-neutral-800 rounded"
+                placeholder="Адрес подачи"
+              />
+
+              <label className="block text-xs text-neutral-400 mt-2">Пункт назначения</label>
+              <input
+                value={orderDraft.dropoff || ''}
+                onChange={(e) => setOrderDraft({ ...orderDraft, dropoff: e.target.value })}
+                className="w-full p-2 bg-neutral-800 rounded"
+                placeholder="Адрес назначения"
+              />
+
+              <label className="block text-xs text-neutral-400 mt-2">Дата и время</label>
+              <input
+                value={orderDraft.datetime || ''}
+                onChange={(e) => setOrderDraft({ ...orderDraft, datetime: e.target.value })}
+                className="w-full p-2 bg-neutral-800 rounded"
+                placeholder="22.08 14:00"
+              />
+
+              <label className="block text-xs text-neutral-400 mt-2">Класс авто</label>
+              <select
+                value={orderDraft.carClass || ''}
+                onChange={(e) => setOrderDraft({ ...orderDraft, carClass: e.target.value })}
+                className="w-full p-2 bg-neutral-800 rounded"
+              >
+                <option value="">Выберите класс</option>
+                {carClasses.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+
+              <label className="block text-xs text-neutral-400 mt-2">Примечание</label>
+              <textarea
+                value={orderDraft.notes || ''}
+                onChange={(e) => setOrderDraft({ ...orderDraft, notes: e.target.value })}
+                className="w-full p-2 bg-neutral-800 rounded"
+                rows={2}
+                placeholder="Доп. пожелания"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmOpen(false)}
+                className="px-4 py-2 border border-white/10 rounded"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={submitOrder}
+                className="px-4 py-2 bg-gold text-black rounded"
+                disabled={sendingOrder || !orderDraft.name || !orderDraft.phone || !isValidPhone(orderDraft.phone)}
+              >
+                {sendingOrder ? 'Отправка...' : 'Подтвердить и отправить'}
+              </button>
+            </div>
+
+            {!isValidPhone(orderDraft.phone) && (
+              <div className="text-xs text-yellow-300 mt-2">Номер выглядит некорректно для выбранного формата.</div>
+            )}
+          </div>
+        </div>
+      )}
     </>
   )
-              }
+}
