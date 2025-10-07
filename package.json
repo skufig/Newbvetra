@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "vercel-build": "next build",
-    "postinstall": "npx shadcn-ui@latest init -y"
+    "postinstall": "npx shadcn@latest init -y"
   },
   "dependencies": {
     "@headlessui/react": "^1.7.19",
@@ -34,9 +34,10 @@
     "react-hook-form": "^7.53.0",
     "remark": "^14.0.3",
     "remark-html": "^15.0.1",
-    "shadcn-ui": "^0.9.0",
+    "shadcn": "^1.0.0",
     "tailwindcss": "^3.4.10",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "react-phone-input-2": "^2.15.1"
   },
   "devDependencies": {
     "@types/node": "^20.11.24",
