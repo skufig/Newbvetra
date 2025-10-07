@@ -1,6 +1,9 @@
 import { AsYouType, parsePhoneNumberFromString } from 'libphonenumber-js'
 
-export function formatPhoneNumber(val: string) {
+/**
+ * Форматирует номер в международном виде (например: +7 999 123 45 67)
+ */
+export function formatPhoneForDisplay(val: string) {
   try {
     const digits = val.replace(/[^\d+]/g, '')
     const asYou = new AsYouType()
@@ -12,7 +15,10 @@ export function formatPhoneNumber(val: string) {
   }
 }
 
-export function isValidPhoneNumber(phone: string) {
+/**
+ * Проверяет, валиден ли номер телефона
+ */
+export function isValidPhone(phone: string) {
   try {
     const number = parsePhoneNumberFromString(phone)
     return number?.isValid() || false
@@ -20,3 +26,7 @@ export function isValidPhoneNumber(phone: string) {
     return false
   }
 }
+
+// ✅ Для обратной совместимости (старые вызовы)
+export const formatPhoneNumber = formatPhoneForDisplay
+export const isValidPhoneNumber = isValidPhone
